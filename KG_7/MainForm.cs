@@ -50,6 +50,8 @@ namespace KG_7
                 label_cur_size.Text = label_orig_size.Text;
             }
             trackBar_k.Value = 10;
+            trackBar_n.Value = 1;
+            trackBar_sigma.Value = 10;
         }
 
 
@@ -143,6 +145,7 @@ namespace KG_7
             return resizedImage;
         }
 
+
         /// <summary>
         /// Выполняет билинейную интерполяцию цвета между четырьмя соседними пикселями
         /// </summary>
@@ -161,6 +164,104 @@ namespace KG_7
             double b = (1 - fx) * (1 - fy) * c00.B + fx * (1 - fy) * c10.B + (1 - fx) * fy * c01.B + fx * fy * c11.B;
 
             return Color.FromArgb((int)r, (int)g, (int)b);
+        }
+
+        //Чем больше n, тем более сглаженное изображение
+        private void trackBar_n_ValueChanged(object sender, EventArgs e)
+        {
+            label_n.Text = (trackBar_n.Value * 2 + 1).ToString();
+        }
+
+        //Определяет степень размытия (чем больше - тем размытее)
+        private void trackBar_sigma_ValueChanged(object sender, EventArgs e)
+        {
+            double sigma = trackBar_sigma.Value / 10.0;
+            label_sigma.Text = sigma.ToString();
+        }
+
+
+        private void ApplyGaussianBlur(int filterSize, double sigma)
+        {
+            Bitmap source = new Bitmap(pictureBox_image.Image);
+            Bitmap result = new Bitmap(source.Width, source.Height);
+
+            double[,] filter = CreateGaussianKernel(filterSize, sigma);
+
+            //Радиус фильтра
+            int r = filterSize / 2;
+
+            for (int y = 0; y < source.Height; y++)
+            {
+                for (int x = 0; x < source.Width; x++)
+                {
+                    double red = 0.0, green = 0.0, blue = 0.0;
+
+                    for (int fy = 0; fy < filterSize; fy++)
+                    {
+                        for (int fx = 0; fx < filterSize; fx++)
+                        {
+                            // Вычисляем координаты соседнего пикселя с учетом отзеркаливания
+                            int imageX = x + fx - r;
+                            int imageY = y + fy - r;
+
+                            if (imageX < 0) imageX = -imageX;
+                            if (imageX >= source.Width) imageX = 2 * source.Width - imageX - 1;
+                            if (imageY < 0) imageY = -imageY;
+                            if (imageY >= source.Height) imageY = 2 * source.Height - imageY - 1;
+
+                            // Получаем цвет пикселя и добавляем взвешенные значения
+                            Color pixelColor = source.GetPixel(imageX, imageY);
+
+                            red += pixelColor.R * filter[fy, fx];
+                            green += pixelColor.G * filter[fy, fx];
+                            blue += pixelColor.B * filter[fy, fx];
+                        }
+                    }
+
+                    int rValue = Math.Min(Math.Max((int)Math.Round(red), 0), 255);
+                    int gValue = Math.Min(Math.Max((int)Math.Round(green), 0), 255);
+                    int bValue = Math.Min(Math.Max((int)Math.Round(blue), 0), 255);
+
+                    result.SetPixel(x, y, Color.FromArgb(rValue, gValue, bValue));
+                }
+            }
+            pictureBox_image.Image = result;
+        }
+
+
+        private double[,] CreateGaussianKernel(int size, double sigma)
+        {
+            double[,] kernel = new double[size, size];
+            int r = size / 2;
+            double sigma2 = sigma * sigma;
+            double normalizationFactor = 0.0;
+
+            for (int y = -r; y <= r; y++)
+            {
+                for (int x = -r; x <= r; x++)
+                {
+                    double value = Math.Exp(-(x * x + y * y) / (2 * sigma2));
+                    kernel[y + r, x + r] = value;
+                    normalizationFactor += value;
+                }
+            }
+
+            //Нормализация ядра, чтобы сумма элементов фильтра равнялась 1.
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    kernel[y, x] /= normalizationFactor;
+                }
+            }
+            return kernel;
+        }
+
+
+        private void button_filter_Click(object sender, EventArgs e)
+        {
+            if (originalImage == null) { return; }
+            ApplyGaussianBlur((trackBar_n.Value * 2 + 1), trackBar_sigma.Value / 10.0);
         }
     }
 }
